@@ -1,14 +1,9 @@
 {
   "version": 2,
   "framework": null,
-  "buildCommand": "bash build.sh",
+  "buildCommand": "flutter/bin/flutter pub get && flutter/bin/flutter pub run sqflite_common_ffi_web:setup && flutter/bin/flutter build web --release",
   "outputDirectory": "build/web",
   "regions": ["cdg1"],
   "trailingSlash": false,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
