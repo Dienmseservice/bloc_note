@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io'; // Pour mesurer la taille du fichier (Éco-impact)
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -61,7 +60,6 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE notes ADD COLUMN userId INTEGER NOT NULL DEFAULT 1');
     }
     if (oldVersion < 3) {
-      // Ajout des colonnes pour les Tags et la Corbeille sans détruire l'existant
       await db.execute("ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT 'Général'");
       await db.execute('ALTER TABLE notes ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0');
     }
@@ -72,20 +70,29 @@ class DatabaseHelper {
     return sha256.convert(bytes).toString();
   }
 
-  // ==================== FONCTIONNALITÉ INNOVANTE : ÉCO-IMPACT ====================
-  // Calcule le CO2 économisé par le stockage local vs une infrastructure Cloud standard
+  // ==================== FONCTIONNALITÉ INNOVANTE : ÉCO-IMPACT COMPATIBLE WEB ====================
+  // Calcule la taille de la BDD et le CO2 économisé via des requêtes SQL SQLite pures
   Future<Map<String, double>> getEcoImpactMetrics() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'ecosave_notes.db');
-    final file = File(path);
-
     double fileSizeKB = 0;
-    if (await file.exists()) {
-      int bytes = await file.length();
-      fileSizeKB = bytes / 1024;
+    
+    try {
+      final db = await instance.database;
+      // Récupère le nombre total de pages utilisées par la BDD et la taille d'une page
+      final List<Map<String, dynamic>> pageCountResult = await db.rawQuery('PRAGMA page_count');
+      final List<Map<String, dynamic>> pageSizeResult = await db.rawQuery('PRAGMA page_size');
+      
+      if (pageCountResult.isNotEmpty && pageSizeResult.isNotEmpty) {
+        int pageCount = pageCountResult.first.values.first as int;
+        int pageSize = pageSizeResult.first.values.first as int;
+        
+        // Calcul du poids total en Ko
+        fileSizeKB = (pageCount * pageSize) / 1024;
+      }
+    } catch (e) {
+      fileSizeKB = 0.0;
     }
 
-    // Estimation théorique : Éviter le Cloud économise environ 0.02 mg de CO2 par Ko de transfert/requête réseau
+    // Estimation théorique : Éviter le Cloud économise environ 0.02 mg de CO2 par Ko
     double co2SavedMg = fileSizeKB * 0.02;
 
     return {
@@ -161,7 +168,6 @@ class DatabaseHelper {
     return await db.insert('notes', noteMap);
   }
 
-  // R - Lire uniquement les notes actives (non envoyées à la corbeille)
   Future<List<NoteModel>> readUserNotes(int userId) async {
     final db = await instance.database;
     final result = await db.query(
@@ -173,7 +179,6 @@ class DatabaseHelper {
     return result.map((json) => NoteModel.fromMap(json)).toList();
   }
 
-  // R - Lire uniquement les notes se trouvant dans la corbeille
   Future<List<NoteModel>> readTrashNotes(int userId) async {
     final db = await instance.database;
     final result = await db.query(
@@ -195,7 +200,6 @@ class DatabaseHelper {
     );
   }
 
-  // Envoi temporaire à la corbeille (Soft Delete éco-responsable)
   Future<int> moveToTrash(int id) async {
     final db = await instance.database;
     return await db.update(
@@ -206,7 +210,6 @@ class DatabaseHelper {
     );
   }
 
-  // Restauration depuis la corbeille
   Future<int> restoreFromTrash(int id) async {
     final db = await instance.database;
     return await db.update(
@@ -217,7 +220,6 @@ class DatabaseHelper {
     );
   }
 
-  // Suppression définitive de la BDD
   Future<int> deleteNotePermanent(int id) async {
     final db = await instance.database;
     return await db.delete(
